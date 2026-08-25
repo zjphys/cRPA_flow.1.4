@@ -147,6 +147,37 @@ class RankWannierBandsTests(unittest.TestCase):
             (0.38461538, -0.0, 0.0),
         )
 
+    def test_accepts_single_ion_procar_without_total_rows(self) -> None:
+        path = self.write_procar([[
+            (0.25, [[(0.9, 0, 0)], [(0, 0.8, 0)]]),
+            (0.75, [[(0.7, 0, 0)], [(0, 0.6, 0)]]),
+        ]])
+        text = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("tot ")
+        )
+        path.write_text(text + "\n", encoding="utf-8")
+
+        data = ranker.parse_procar(path)
+
+        self.assertEqual(data.nions, 1)
+        self.assertEqual(data.nkpoints, 2)
+        self.assertEqual(data.nbands, 2)
+        self.assertAlmostEqual(
+            data.kpoints["none"][1].bands[1].ion_projections[0][1], 0.6
+        )
+
+    def test_still_requires_total_rows_for_multiple_ions(self) -> None:
+        path = self.write_procar([[(1, [[(0, 0, 1), (0, 0, 0)]])]])
+        text = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("tot ")
+        )
+        path.write_text(text + "\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ranker.PBandError, "total projection row"):
+            ranker.parse_procar(path)
+
     def test_ties_use_ascending_band_index(self) -> None:
         path = self.write_procar([[(1, [
             [(0, 0, 0.5), (0, 0, 0)], [(0, 0, 0.5), (0, 0, 0)],

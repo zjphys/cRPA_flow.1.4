@@ -261,16 +261,23 @@ def parse_procar(path: Path) -> ProcarData:
                 cursor += 1
 
             cursor = _next_content(lines, cursor)
-            if cursor >= len(lines):
-                raise PBandError(f"{path}: missing total projection row")
-            total_fields = lines[cursor].split()
-            if not total_fields or normalized_name(total_fields[0]) != "tot":
+            total_fields = lines[cursor].split() if cursor < len(lines) else []
+            has_total_row = bool(
+                total_fields and normalized_name(total_fields[0]) == "tot"
+            )
+            # VASP omits the redundant sum-over-ions row for a single ion.
+            if has_total_row:
+                if len(total_fields) != len(found_columns) + 1:
+                    raise PBandError(
+                        f"{path}:{cursor + 1}: malformed total projection row"
+                    )
+                for value in total_fields[1:]:
+                    _float_field(value, path, cursor + 1, "total projection")
+                cursor += 1
+            elif nions != 1:
+                if cursor >= len(lines):
+                    raise PBandError(f"{path}: missing total projection row")
                 raise PBandError(f"{path}:{cursor + 1}: expected total projection row")
-            if len(total_fields) != len(found_columns) + 1:
-                raise PBandError(f"{path}:{cursor + 1}: malformed total projection row")
-            for value in total_fields[1:]:
-                _float_field(value, path, cursor + 1, "total projection")
-            cursor += 1
             bands.append(
                 ProcarBand(expected_band, energy, occupation, tuple(ion_rows))
             )
